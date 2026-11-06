@@ -1,0 +1,25 @@
+{
+ "run_id": "planned-4313-s01-5ab4ee",
+ "action": "open_pr",
+ "action_class": "open_pr",
+ "args": {
+  "issue": "issue-4313",
+  "body": "File: src/ingest/queue.ts\n\nAdd startup or maintenance recovery for import jobs stuck in the 'running' state after a worker crash or deployment restart, so they can be retried or marked failed instead of hanging indefinitely.",
+  "branch": "repomind/issue-4313",
+  "title": "Reset or handle orphaned running import jobs on startup"
+ },
+ "facts": {
+  "issue": 4313,
+  "issue_opened_by_agent": true,
+  "minutes_since_human_comment": null,
+  "label": null,
+  "branch": "repomind/issue-4313",
+  "branch_protected": false,
+  "base": "develop",
+  "target_created_by_agent": true,
+  "paths": []
+ },
+ "kind": "approval",
+ "request_id": "c37559915a9e",
+ "asked_at": "2026-11-05T19:58:14.581Z"
+}

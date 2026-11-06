@@ -1,0 +1,25 @@
+{
+ "run_id": "planned-4301-s01-933190",
+ "action": "open_pr",
+ "action_class": "open_pr",
+ "args": {
+  "title": "Advance schedule next run on failure to prevent loops",
+  "issue": "issue-4301",
+  "branch": "repomind/issue-4301",
+  "body": "File: src/export/scheduler.ts\n\nAdvance the schedule's next run time even when sending the export fails, preventing repeated failing loops on large attachments."
+ },
+ "facts": {
+  "issue": 4301,
+  "issue_opened_by_agent": true,
+  "minutes_since_human_comment": null,
+  "label": null,
+  "branch": "repomind/issue-4301",
+  "branch_protected": false,
+  "base": "develop",
+  "target_created_by_agent": true,
+  "paths": []
+ },
+ "kind": "approval",
+ "request_id": "0dac44327a44",
+ "asked_at": "2026-11-05T19:57:37.938Z"
+}

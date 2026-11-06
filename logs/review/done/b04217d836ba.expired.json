@@ -1,0 +1,25 @@
+{
+ "run_id": "planned-4323-s01-6a564c",
+ "action": "open_pr",
+ "action_class": "open_pr",
+ "args": {
+  "branch": "repomind/issue-4323",
+  "issue": "issue-4323",
+  "body": "File: src/notifications/rollup.ts\n\nWrap the user time-zone processing in a try/catch block so that an invalid time zone on a single user record logs a warning and skips that user rather than throwing an uncaught exception and halting the entire weekly rollup run.",
+  "title": "Handle invalid user time zones gracefully during weekly rollup"
+ },
+ "facts": {
+  "issue": 4323,
+  "issue_opened_by_agent": true,
+  "minutes_since_human_comment": null,
+  "label": null,
+  "branch": "repomind/issue-4323",
+  "branch_protected": false,
+  "base": "develop",
+  "target_created_by_agent": true,
+  "paths": []
+ },
+ "kind": "approval",
+ "request_id": "b04217d836ba",
+ "asked_at": "2026-11-05T19:58:59.398Z"
+}

@@ -1,0 +1,25 @@
+{
+ "run_id": "planned-4326-s01-1769c8",
+ "action": "open_pr",
+ "action_class": "open_pr",
+ "args": {
+  "body": "File: src/config.ts\n\nTreat an empty string environment variable for `S3_REGION` the same as unset, falling back to file config or the default region (\"eu-west-1\"), so that pass-through environment variables that are empty on the host do not override valid file defaults.",
+  "branch": "repomind/issue-4326",
+  "title": "Fall back to default region when S3_REGION is empty",
+  "issue": "issue-4326"
+ },
+ "facts": {
+  "issue": 4326,
+  "issue_opened_by_agent": true,
+  "minutes_since_human_comment": null,
+  "label": null,
+  "branch": "repomind/issue-4326",
+  "branch_protected": false,
+  "base": "develop",
+  "target_created_by_agent": true,
+  "paths": []
+ },
+ "kind": "approval",
+ "request_id": "24cba782384f",
+ "asked_at": "2026-11-05T19:59:09.594Z"
+}

@@ -1,0 +1,25 @@
+{
+ "run_id": "planned-4309-s01-fbee4f",
+ "action": "open_pr",
+ "action_class": "open_pr",
+ "args": {
+  "title": "Return 400 for invalid JSON request bodies on reports",
+  "issue": "issue-4309",
+  "branch": "repomind/issue-4309",
+  "body": "File: src/api/reports.ts\n\nReturn a 400 bad request error instead of a 500 internal error when a request body cannot be parsed as valid JSON (e.g. due to a trailing comma)."
+ },
+ "facts": {
+  "issue": 4309,
+  "issue_opened_by_agent": true,
+  "minutes_since_human_comment": null,
+  "label": null,
+  "branch": "repomind/issue-4309",
+  "branch_protected": false,
+  "base": "develop",
+  "target_created_by_agent": true,
+  "paths": []
+ },
+ "kind": "approval",
+ "request_id": "d8297c84837c",
+ "asked_at": "2026-11-05T19:58:04.658Z"
+}

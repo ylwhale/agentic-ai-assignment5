@@ -1,0 +1,25 @@
+{
+ "run_id": "planned-4328-s01-f1177e",
+ "action": "open_pr",
+ "action_class": "open_pr",
+ "args": {
+  "title": "Close idle keep-alive connections on server shutdown",
+  "body": "File: src/index.ts\n\nClose idle keep-alive connections on HTTP server shutdown before closing the database pool, ensuring the server terminates promptly instead of timing out.",
+  "issue": "issue-4328",
+  "branch": "repomind/issue-4328"
+ },
+ "facts": {
+  "issue": 4328,
+  "issue_opened_by_agent": true,
+  "minutes_since_human_comment": null,
+  "label": null,
+  "branch": "repomind/issue-4328",
+  "branch_protected": false,
+  "base": "develop",
+  "target_created_by_agent": true,
+  "paths": []
+ },
+ "kind": "approval",
+ "request_id": "8189ef90a0ba",
+ "asked_at": "2026-11-05T20:29:05.933Z"
+}

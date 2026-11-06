@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+"""Recompute stop latency diagnostics from actual stop logs, without inventing evidence."""
+from __future__ import annotations
+import json
+import statistics
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+from harness.clock import seconds_between
+from harness.runner import is_free
+
+
+def main():
+    path = ROOT / 'logs' / 'stops.jsonl'
+    if not path.exists():
+        print('No stop events to summarize', file=sys.stderr)
+        return 1
+    events: dict[str, dict] = {}
+    for line in path.read_text().splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        run_id, event = row.get('run_id'), row.get('event')
+        if not run_id or event not in ('requested', 'effective'):
+            continue
+        event_row = events.setdefault(run_id, {})
+        event_row.setdefault(event, row['at'])
+    latencies = {}
+    for run_id, ev in events.items():
+        if not all(k in ev for k in ('requested', 'effective')):
+            continue
+        trace = ROOT / 'runs' / (run_id + '.jsonl')
+        if not trace.exists():
+            continue
+        rows = [json.loads(line) for line in trace.read_text().splitlines() if line.strip()]
+        if not rows or rows[0].get('lab') != '05' or is_free(rows[0].get('backend') or ''):
+            continue
+        latencies[run_id] = seconds_between(ev['requested'], ev['effective'])
+    if not latencies:
+        print('No real-model stops with requested/effective events', file=sys.stderr)
+        return 1
+    report_file = ROOT / 'reports' / 'LAB_05.json'
+    data = json.loads(report_file.read_text())
+    values = sorted(latencies.values())
+    data['stop'] = {
+        'run_ids': list(latencies),
+        'latencies_s': values,
+        'p50_s': statistics.median(values),
+        'max_s': max(values),
+        'partial_condition': (data.get('stop') or {}).get('partial_condition') or 'fast',
+    }
+    report_file.write_text(json.dumps(data, indent=2) + '\n')
+    print(f'Updated stop results for {len(values)} real-model runs; median={statistics.median(values):.3f}s, max={max(values):.3f}s')
+    print('Reminder: the five stop conditions also require live notice, checkpointed resume, safe writes and no outside writes.')
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

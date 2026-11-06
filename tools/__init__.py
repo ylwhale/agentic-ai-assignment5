@@ -49,6 +49,7 @@ from pathlib import Path
 
 from harness.schema import errors as schema_errors
 from harness.tracker import ReadbackUnavailable, TrackerTimeout
+from policy.hook import make_hook
 
 TOOLS_DIR = Path(__file__).resolve().parent
 MODULES = ("read_issue", "search_repo", "read_file", "post_comment", "open_pr",
@@ -141,7 +142,7 @@ def load_definition(module: str) -> dict:
 class ToolRegistry:
     def __init__(self, ctx: RunContext, modules=MODULES):
         self.ctx = ctx
-        self.hooks: list = [allow_all]
+        self.hooks: list = [allow_all, make_hook(ctx)]
         self.protocol_errors = 0
         self._tools: dict[str, tuple[str, dict, object]] = {}
         for module in modules:

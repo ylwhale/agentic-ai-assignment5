@@ -113,6 +113,12 @@ from agent.validator import validate
 from harness.formats import FILL, format_triage_comment, parse_triage_comment, result_paths
 from harness.roles import ALL_ROLES, arg, tool_for
 from harness.schema import errors as schema_errors
+from policy.boundary import incoming_user_messages
+from policy.disclosure import add_disclosure
+from policy.escalation import ask_failed_verification
+from policy.stop import requested as stop_requested, effective as stop_effective, lift as lift_stop
+from harness.notify import notify
+from policy.hook import write_line
 from state.checkpointer import Checkpointer
 from state.store import REPOSITORY, Store
 from tools import Unverifiable
@@ -161,12 +167,38 @@ class Recording:
         return getattr(self._client, name)
 
 
+class InboxClient:
+    """Deliver inbox messages before every model call, without altering the model client."""
+
+    def __init__(self, ctx, client):
+        self._ctx = ctx
+        self._client = client
+
+    def create(self, **request):
+        incoming = incoming_user_messages(self._ctx)
+        if incoming:
+            request["messages"] = list(request.get("messages") or []) + [
+                {"role": "user", "content": message} for message in incoming
+            ]
+        return self._client.create(**request)
+
+    def __getattr__(self, name):
+        return getattr(self._client, name)
+
+
 def run(ctx) -> None:
     conversation: list[dict] = []
     if os.environ.get(CONVERSATION) == "1":
         ctx.client = Recording(ctx.client, conversation)
+    ctx.client = InboxClient(ctx, ctx.client)
     checkpointer = Checkpointer()
     last = checkpointer.last(ctx.run_id)
+    if last is not None and stop_requested(ctx.run_id):
+        lift_stop(ctx.run_id)
+    if last is None:
+        notify("live", ctx.run_id,
+               f"RepoMind is running on issue {ctx.issue_number}; stop it with bin/stop {ctx.run_id}",
+               root=ctx.root)
     memory = recall(ctx)
     if last is not None:                          # a resume: rebuild from the last checkpoint, never re-plan
         executor = Executor(ctx, last["plan"], checkpointer=checkpointer, memory=memory, restore=last)
@@ -375,6 +407,16 @@ class Executor:
     def run(self) -> None:
         while True:
             step = self.next_step()
+            if stop_requested(self.ctx.run_id):
+                action = role(step.get("tool")) if step else "finish"
+                stop_effective(self.ctx.run_id, action)
+                write_line("hook.jsonl", {"at": __import__("harness.clock", fromlist=["now"]).now(),
+                            "run_id": self.ctx.run_id, "action": action,
+                            "action_class": action, "column": None, "reason": "stopped", "args": {}})
+                # The latest checkpoint must include every committed write.
+                self.save_state(step or {"id": "stop"}, current=step.get("id") if step else None)
+                self.ctx.trace.end("stopped", detail="stop requested; no further action allowed")
+                return
             if step is None:
                 return                            # the plan is finished; the runner writes completed
             if role(step.get("tool")) in ("apply_label", "open_pr", "comment") and self.draft is None:
@@ -407,6 +449,10 @@ class Executor:
         args = self.filled(step, args)
         if args is None:
             return None
+        # A failed verification is evidence, not merely a model warning. Before a
+        # consequential push, ask about the actual failing branch test result.
+        if role(tool) == "push_commit" and not self.may_push_after_tests(step, args):
+            return None
         result = self.call(step, tool, args)
         return None if result is None else self.record(step, args, result)
 
@@ -414,11 +460,53 @@ class Executor:
         """One tool call for a plan step; None when the registry could not confirm a
         write, and the run has ended escalated (the third exit)."""
         try:
-            return self.ctx.call_tool(self.calls, tool, args, plan_step=step.get("id"))
+            result = self.ctx.call_tool(self.calls, tool, args, plan_step=step.get("id"))
+            # A reviewer timeout is a hold, not a successful completed step.
+            # The write's sync checkpoint was saved before reaching this hook.
+            if result.is_error and result.content.startswith("This call was not allowed: policy refused "):
+                if result.content.endswith(": no_answer"):
+                    self.ctx.trace.end("held", detail=f"step {step.get('id')}: reviewer did not answer")
+                    return None
+                if result.content.endswith(": declined"):
+                    self.ctx.trace.end("escalated", detail=f"step {step.get('id')}: reviewer declined")
+                    return None
+                if result.content.endswith(": stopped"):
+                    # The rejected attempt has a tool_call trace; checkpoint after it.
+                    self.save_state(step, current=step.get("id"))
+                    self.ctx.trace.end("stopped", detail=f"step {step.get('id')}: stopped")
+                    return None
+            return result
         except Unverifiable as exc:
             self.record(step, args, None, "unverifiable")
             self.ctx.trace.end("escalated", detail=f"step {step.get('id')}: {exc}; a person on review duty decides")
             return None
+
+    def may_push_after_tests(self, step: dict, args: dict) -> bool:
+        """The remote test result is authoritative; a model's confidence is not.
+
+        Only a test of the branch this push would modify matters. This also
+        works after resume because completed calls survive in checkpoints.
+        """
+        branch = str(args.get(arg("push_commit", "branch"), ""))
+        failed = None
+        for call in self.completed:
+            if role(call.get("tool")) != "run_tests":
+                continue
+            try:
+                result = json.loads(call.get("result") or "{}")
+            except (ValueError, TypeError):
+                continue
+            if result.get("passed") is False and result.get("ref") == branch:
+                failed = list(result.get("failed") or [])
+        if failed is None:
+            return True
+        self.save_state(step, current=step.get("id"))  # durable before asking
+        decision = ask_failed_verification(self.ctx, step, args, failed)
+        if decision == "approve":
+            return True
+        self.ctx.trace.end("stopped" if decision == "stopped" else "held" if decision == "none" else "escalated",
+                           detail=f"failed verification before push; escalation {decision}")
+        return False
 
     def filled(self, step: dict, args: dict) -> dict | None:
         to_fill = [k for k, v in args.items() if str(v).startswith(FILL)]   # "$fill", or "$fill: a note"
@@ -458,7 +546,11 @@ class Executor:
                     continue
                 if role(step["tool"]) == "comment":
                     body = arg("comment", "body")
-                    label, file = parse_triage_comment(str(filled[body]))
+                    # Some models omit required fields even in their tool calls.
+                    # Treat the reply as invalid and retry, never raise KeyError.
+                    if body not in filled or not isinstance(filled[body], str) or not filled[body].strip():
+                        continue
+                    label, file = parse_triage_comment(filled[body])
                     filled[body] = format_triage_comment(label or "bug", file)
                 return filled
         return None
@@ -563,8 +655,13 @@ class Executor:
             self.completed.append({"step": step.get("id"), "tool": tool, "args": args, "key": result.key,
                                    "result": text[:CONTEXT_CHARS], "status": status, "count": count,
                                    "paths": paths, "error_code": error})
-            if role(tool) == "read_file":
-                self.save_state(step)             # after the expensive read, so a replay does not repeat it
+            if role(tool) in ("read_file", "run_tests", "apply_label", "open_pr", "comment", "close_issue", "push_commit"):
+                # Persist successful reads, tests AND completed writes; the next
+                # stop checkpoint will have all preceding idempotency keys.
+                self.save_state(step)
+        if role(tool) == "search" and error == "no_matches":
+            self.ctx.trace.event("not_determined", step=step.get("id"),
+                                 question="The repository search returned no matching path; the responsible file is not determined.")
         return entry
 
     # -- revision, at the checkpoint whose check failed --------------------------------------
@@ -602,7 +699,14 @@ class Executor:
     def prepare(self, step: dict) -> bool:
         """Draft the comment and run the second pass, before the PR or the comment is
         written. False when the run has ended, with nothing written."""
-        draft = self.filled(step, step_args(step))
+        # A real planner can omit the comment's required body from args_json.
+        # Request that missing field through the *planned comment tool* instead
+        # of indexing it and crashing halfway through the day queue.
+        body_key = arg("comment", "body")
+        draft_args = dict(step_args(step))
+        if not isinstance(draft_args.get(body_key), str) or not draft_args[body_key].strip():
+            draft_args[body_key] = FILL
+        draft = self.filled(step, draft_args)
         if draft is None:
             return False
         final = self.second_pass(step, draft) if self.critique else draft
@@ -610,14 +714,21 @@ class Executor:
             self.record(step, draft, None, "held")
             self.ctx.trace.end("escalated", detail=f"the draft still failed the second pass after {MAX_ROUNDS} rounds")
             return False
+        # The checked draft gets its disclosure from the harness, not the model.
+        final = dict(final)
+        body_key = arg("comment", "body")
+        final[body_key] = add_disclosure(final[body_key])
         self.draft = final
-        self.drafted_file = parse_triage_comment(str(final.get(arg("comment", "body"))))[1] or "none"
+        self.drafted_file = parse_triage_comment(str(final[body_key]))[1] or "none"
         return True
 
     def post(self, step: dict) -> bool:
         """Post the checked draft, the run's last write, behind a sync checkpoint. A
         resume posts the draft its checkpoint saved, never a new one. False when the
         run has ended."""
+        # Also protect a resumed run that restored a draft from an older checkpoint.
+        body_key = arg("comment", "body")
+        self.draft[body_key] = add_disclosure(self.draft[body_key])
         step["status"] = "running"
         self.save_state(step, current=step.get("id"))
         result = self.call(step, step["tool"], self.draft)

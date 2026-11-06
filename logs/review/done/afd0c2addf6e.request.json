@@ -1,0 +1,23 @@
+{
+ "run_id": "planned-4320-s01-9ff961",
+ "action": "post_comment",
+ "action_class": "post_comment/human_quiet",
+ "args": {
+  "issue": "issue-4320",
+  "body": "label: feature\nfile: src/export/scheduler.ts\nThis comment was written by RepoMind, an automated AI agent. To reach a human, reply to this issue and request a Ledgerline maintainer."
+ },
+ "facts": {
+  "issue": 4320,
+  "issue_opened_by_agent": false,
+  "minutes_since_human_comment": 81.1,
+  "label": null,
+  "branch": null,
+  "branch_protected": null,
+  "base": null,
+  "target_created_by_agent": false,
+  "paths": []
+ },
+ "kind": "approval",
+ "request_id": "afd0c2addf6e",
+ "asked_at": "2026-11-05T20:28:57.170Z"
+}

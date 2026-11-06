@@ -1,0 +1,172 @@
+#!/usr/bin/env python3
+"""Run one real-model stop/resume experiment without a second terminal.
+
+This is a local convenience wrapper only: it invokes the ordinary run.py,
+existing bin/stop, and run.py --resume. It never changes an experiment log,
+trace, checkpoint, checker, or harness code.
+
+    python bin/auto_stop_once
+    python bin/auto_stop_once --issue 4303
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import queue
+import re
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+LIVE_RE = re.compile(r"\[notify live\]\s+([A-Za-z0-9_.-]+):")
+
+
+def records(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    result = []
+    # TraceWriter flushes complete JSON lines; tolerate a concurrent partial read.
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if line.strip():
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(obj, dict):
+                result.append(obj)
+    return result
+
+
+def stream_lines(pipe, out: queue.Queue) -> None:
+    try:
+        for line in iter(pipe.readline, ""):
+            out.put(line)
+    finally:
+        out.put(None)
+        pipe.close()
+
+
+def stop_is_effective(run_id: str) -> bool:
+    return any(row.get("run_id") == run_id and row.get("event") == "effective"
+               for row in records(ROOT / "logs" / "stops.jsonl"))
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--issue", type=int, default=4303, help="issue to run (default: 4303)")
+    parser.add_argument("--backend", help="optional backend for a local test; omit for configured real Gemini")
+    parser.add_argument("--no-resume", action="store_true", help="do not automatically resume after a stop")
+    args = parser.parse_args(argv)
+    if args.issue <= 0:
+        parser.error("--issue must be a positive issue number")
+    env = dict(os.environ)
+    env["REVIEWER"] = "scripted:approve-all"
+    cmd = [sys.executable, "-u", "run.py", "--way", "planned", "--issues", str(args.issue), "--jobs", "1"]
+    if args.backend:
+        cmd += ["--backend", args.backend]
+
+    print("Starting one RepoMind run; automatically stopping after its first tool call.", flush=True)
+    print("The run and its resume use the configured model unless you specified --backend.", flush=True)
+    process = subprocess.Popen(cmd, cwd=ROOT, env=env, stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT, text=True, bufsize=1)
+    messages: queue.Queue = queue.Queue()
+    thread = threading.Thread(target=stream_lines, args=(process.stdout, messages), daemon=True)
+    thread.start()
+    run_id: str | None = None
+    stop_sent = False
+    log_done = False
+    last_status = time.monotonic()
+    try:
+        while True:
+            while True:
+                try:
+                    line = messages.get_nowait()
+                except queue.Empty:
+                    break
+                if line is None:
+                    log_done = True
+                    break
+                print("[agent] " + line.rstrip("\n"), flush=True)
+                match = LIVE_RE.search(line)
+                if match and run_id is None:
+                    run_id = match.group(1)
+                    print("Detected run ID:", run_id, flush=True)
+
+            if run_id and not stop_sent and process.poll() is None:
+                trace = records(ROOT / "runs" / f"{run_id}.jsonl")
+                tool_count = sum(row.get("type") == "tool_call" for row in trace)
+                ended = any(row.get("type") == "run_end" for row in trace)
+                if tool_count >= 1 and not ended:
+                    print(f"First tool call recorded ({tool_count} so far); requesting stop now ...", flush=True)
+                    stop = subprocess.run([sys.executable, "bin/stop", run_id], cwd=ROOT,
+                                          env=env, text=True, capture_output=True)
+                    if stop.stdout.strip():
+                        print(stop.stdout.strip(), flush=True)
+                    if stop.stderr.strip():
+                        print(stop.stderr.strip(), file=sys.stderr, flush=True)
+                    stop_sent = stop.returncode == 0
+                    if not stop_sent:
+                        print("Stop was not accepted; this attempt may not count.", flush=True)
+                        break
+                elif ended:
+                    print("Run finished before the stop could be requested; no stop credit.", flush=True)
+                    break
+
+            if process.poll() is not None and (log_done or messages.empty()):
+                break
+            if not run_id and time.monotonic() - last_status > 20:
+                print("Waiting for RepoMind's live notification ...", flush=True)
+                last_status = time.monotonic()
+            time.sleep(0.05)
+    except KeyboardInterrupt:
+        print("\nInterrupted the helper. Existing run and logs were not edited.", file=sys.stderr)
+        if run_id:
+            print("Check the run manually:", run_id, file=sys.stderr)
+        return 130
+
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        print("The original run is still active. Check its state before resuming.", file=sys.stderr)
+        return 1
+
+    if run_id is None:
+        print("No live run ID was detected; see agent output above.", file=sys.stderr)
+        return 1
+    first = records(ROOT / "runs" / f"{run_id}.jsonl")
+    stopped = any(row.get("type") == "end" and row.get("terminal_reason") == "stopped" for row in first)
+    if not (stop_sent and stop_is_effective(run_id) and stopped):
+        print(f"Stop did not take effect for {run_id}; do not count this attempt.", file=sys.stderr)
+        return 1
+    first_tool_at = max((i for i, row in enumerate(first) if row.get("type") == "tool_call"), default=-1)
+    checkpoint_after = first_tool_at >= 0 and any(
+        row.get("type") == "checkpoint" for row in first[first_tool_at:])
+    print(f"Stop confirmed: {run_id}", flush=True)
+    print("Checkpoint after the last tool call:", "yes" if checkpoint_after else "no", flush=True)
+    if not checkpoint_after:
+        print("This run may not receive durability credit; preserve the trace for diagnosis.", flush=True)
+    if args.no_resume:
+        print("Not resumed (--no-resume specified).", flush=True)
+        return 0
+
+    print("Resuming the same run from its checkpoint ...", flush=True)
+    resumed = subprocess.run([sys.executable, "-u", "run.py", "--resume", run_id],
+                             cwd=ROOT, env=env)
+    end_records = records(ROOT / "runs" / f"{run_id}.jsonl")
+    ends = [row.get("terminal_reason") for row in end_records if row.get("type") == "end"]
+    if resumed.returncode != 0 or not ends or ends[-1] != "completed":
+        print(f"Resume did not complete normally (last terminal reason: {ends[-1:] or 'none'}).",
+              file=sys.stderr)
+        return 1
+    print(f"STOP + RESUME COMPLETE: {run_id}", flush=True)
+    print("Run `bin/stop_report` and `make check-05` to verify the grader's conditions.", flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

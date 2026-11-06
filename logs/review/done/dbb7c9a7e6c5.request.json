@@ -1,0 +1,25 @@
+{
+ "run_id": "planned-4331-s01-f1aac9",
+ "action": "open_pr",
+ "action_class": "open_pr",
+ "args": {
+  "body": "src/exportUtils.ts\n\nNeutralise text values in CSV exports that start with a formula trigger character (=, +, -, or @) by prefixing them with a single quote or escaping them so spreadsheet applications do not interpret them as formulas.",
+  "title": "Neutralise formula trigger characters in CSV exports",
+  "branch": "repomind/issue-4331",
+  "issue": "issue-4331"
+ },
+ "facts": {
+  "issue": 4331,
+  "issue_opened_by_agent": true,
+  "minutes_since_human_comment": null,
+  "label": null,
+  "branch": "repomind/issue-4331",
+  "branch_protected": false,
+  "base": "develop",
+  "target_created_by_agent": true,
+  "paths": []
+ },
+ "kind": "approval",
+ "request_id": "dbb7c9a7e6c5",
+ "asked_at": "2026-11-05T20:29:25.375Z"
+}

@@ -1,0 +1,25 @@
+{
+ "run_id": "planned-4318-s01-c53248",
+ "action": "open_pr",
+ "action_class": "open_pr",
+ "args": {
+  "title": "Accept application/octet-stream for .csv uploads",
+  "body": "File: src/routes/uploads.ts\n\nAccept application/octet-stream as a valid content type for file uploads when the file name ends with .csv, allowing uploads from curl and generic upload clients that omit the CSV MIME type.",
+  "issue": "issue-4318",
+  "branch": "repomind/issue-4318"
+ },
+ "facts": {
+  "issue": 4318,
+  "issue_opened_by_agent": true,
+  "minutes_since_human_comment": null,
+  "label": null,
+  "branch": "repomind/issue-4318",
+  "branch_protected": false,
+  "base": "develop",
+  "target_created_by_agent": true,
+  "paths": []
+ },
+ "kind": "approval",
+ "request_id": "a30ca14d9e89",
+ "asked_at": "2026-11-05T19:58:24.727Z"
+}

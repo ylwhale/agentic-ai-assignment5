@@ -1,0 +1,96 @@
+#!/usr/bin/env python3
+"""Compensate one real run's writes, newest first, retaining non-undoable writes."""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from harness.tracker import Tracker
+
+HAPPENED = {"written", "replayed", "timeout_after_commit"}
+OFFSET = {"apply_label": ("label", "remove_label"),
+          "open_pr": ("pr", "close_pr"),
+          "close_issue": ("close", "reopen_issue")}
+UNDOLESS = {"post_comment", "push_commit", "merge_pr"}
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("run_id", nargs="?")
+    p.add_argument("--list", action="store_true", help="list suitable real runs without modifying them")
+    a = p.parse_args()
+    if a.list:
+        tracker = Tracker(flaky=False, readback_fail=False)
+        by_run = {}
+        for row in tracker.log():
+            by_run.setdefault(row["run_id"], []).append(row)
+        eligible = []
+        for rid, rows in sorted(by_run.items()):
+            trace = ROOT / "runs" / (rid + ".jsonl")
+            if not trace.exists():
+                continue
+            start = next((json.loads(x) for x in trace.read_text().splitlines() if x.strip()), {})
+            if start.get("type") != "run_start" or start.get("lab") != "05":
+                continue
+            if str(start.get("backend", "")).startswith(("harness.scripted:", "never-stops")):
+                continue
+            written = [w for w in rows if w["outcome"] in HAPPENED]
+            kinds = {w["action"] for w in written}
+            simple = all(sum(w["action"] == name for w in written) == 1
+                         for name in ("apply_label", "open_pr", "post_comment"))
+            if simple and {"apply_label", "open_pr", "post_comment"} <= kinds and not (kinds & {"remove_label", "close_pr", "reopen_issue"}):
+                eligible.append(rid)
+        if not eligible:
+            print("No eligible run in the live tracker (archives are not modified).")
+            return 1
+        print("Candidate run IDs with label + PR + comment:")
+        for rid in eligible:
+            print("  " + rid)
+        return 0
+    if not a.run_id:
+        p.error("run_id is required unless --list is used")
+    trace = ROOT / "runs" / (a.run_id + ".jsonl")
+    if not trace.is_file():
+        p.error(f"no trace for run {a.run_id}")
+    first = next((json.loads(s) for s in trace.read_text().splitlines() if s.strip()), {})
+    if first.get("type") != "run_start" or str(first.get("backend", "")).startswith("harness.scripted:"):
+        p.error("select an actual model run, not a scripted or invalid run")
+    tracker = Tracker(flaky=False, readback_fail=False)
+    writes = [w for w in tracker.log(a.run_id) if w["outcome"] in HAPPENED and w["action"] in (set(OFFSET) | UNDOLESS)]
+    if not writes:
+        p.error("run has no successful writes to roll back")
+    report_path = ROOT / "reports" / "LAB_05.json"
+    report = json.loads(report_path.read_text())
+    existing = report.get("rollback", {})
+    if existing.get("run_id") == a.run_id and (existing.get("compensated") or existing.get("none")):
+        p.error("this run was already recorded as rolled back; do not compensate twice")
+
+    compensated, none = [], []
+    for write in reversed(writes):
+        action, target, key = write["action"], str(write["target"]), write.get("key")
+        if action in UNDOLESS:
+            none.append({"action": action, "target": target})
+            print(f"none: {action} {target} (no compensating endpoint)")
+            continue
+        kind, endpoint = OFFSET[action]
+        row = tracker.by_key(a.run_id, kind, key) if key else None
+        if row is None:
+            if kind == "pr" and target.startswith("pr-"):
+                row = tracker.pr(a.run_id, int(target[3:]))
+            else:
+                p.error(f"cannot identify {action} {target} by its recorded key; no change made for this write")
+        getattr(tracker, endpoint)(a.run_id, row["id"])
+        compensated.append({"action": action, "target": target, "by": endpoint})
+        print(f"{endpoint}: {action} {target}")
+
+    report["rollback"] = {"run_id": a.run_id, "compensated": compensated, "none": none}
+    report_path.write_text(json.dumps(report, indent=2) + "\n")
+    print(f"Updated reports/LAB_05.json for {a.run_id}")
+    return 0
+
+if __name__ == "__main__":
+    raise SystemExit(main())

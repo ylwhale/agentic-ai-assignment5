@@ -1,0 +1,43 @@
+independent:
+  - read_issue
+  - search_repo
+  - read_file
+  - run_tests
+  - apply_label
+  - close_issue
+  - post_comment/agent_opened
+
+requires_approval:
+  - post_comment/human_active
+  - post_comment/human_quiet
+  - open_pr
+  - push_commit/unprotected
+
+prohibited:
+  - merge_pr
+  - push_commit/protected
+
+classes:
+  post_comment/agent_opened: >
+    The issue was opened by RepoMind, and no human
+    has commented within the last 60 minutes.
+
+  post_comment/human_active: >
+    A human commented within the last 60 minutes,
+    regardless of who opened the issue.
+
+  post_comment/human_quiet: >
+    The issue was opened by a person, and no human
+    has commented within the last 60 minutes.
+
+  push_commit/unprotected: >
+    The target branch is not protected.
+
+  push_commit/protected: >
+    The target branch is protected.
+
+escalate:
+  - Before an irreversible action when verification has failed.
+  - Before an irreversible action when stored memory contradicts the result.
+  - Before an irreversible action when a tool result cannot be interpreted.
+  - Before an irreversible action when the same step has been blocked three times.

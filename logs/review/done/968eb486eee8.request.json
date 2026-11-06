@@ -1,0 +1,25 @@
+{
+ "run_id": "planned-4336-s01-62efbe",
+ "action": "open_pr",
+ "action_class": "open_pr",
+ "args": {
+  "body": "File: src/export/scheduled.ts\n\nTrim trailing hyphens when truncating report names for export filenames, so names ending in a space or comma before truncation do not produce a double hyphen before the date.",
+  "issue": "issue-4336",
+  "title": "Prevent double hyphens in scheduled export filenames with truncated names",
+  "branch": "repomind/issue-4336"
+ },
+ "facts": {
+  "issue": 4336,
+  "issue_opened_by_agent": true,
+  "minutes_since_human_comment": null,
+  "label": null,
+  "branch": "repomind/issue-4336",
+  "branch_protected": false,
+  "base": "develop",
+  "target_created_by_agent": true,
+  "paths": []
+ },
+ "kind": "approval",
+ "request_id": "968eb486eee8",
+ "asked_at": "2026-11-05T20:58:50.479Z"
+}

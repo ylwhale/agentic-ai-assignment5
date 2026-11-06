@@ -1,0 +1,25 @@
+{
+ "run_id": "planned-4306-s01-585dae",
+ "action": "open_pr",
+ "action_class": "open_pr",
+ "args": {
+  "body": "File: src/components/UploadForm.tsx\n\nClear the file input's value in the upload failure path, so choosing the same file again triggers the file input's onChange event.",
+  "branch": "repomind/issue-4306",
+  "issue": "issue-4306",
+  "title": "Reset file input on upload failure to allow retrying the same file"
+ },
+ "facts": {
+  "issue": 4306,
+  "issue_opened_by_agent": false,
+  "minutes_since_human_comment": 42.1,
+  "label": null,
+  "branch": "repomind/issue-4306",
+  "branch_protected": false,
+  "base": "develop",
+  "target_created_by_agent": true,
+  "paths": []
+ },
+ "kind": "approval",
+ "request_id": "d8b77b71855b",
+ "asked_at": "2026-11-05T19:57:45.830Z"
+}

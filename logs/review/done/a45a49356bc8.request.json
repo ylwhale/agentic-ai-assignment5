@@ -1,0 +1,25 @@
+{
+ "run_id": "planned-4310-s01-c0db94",
+ "action": "open_pr",
+ "action_class": "open_pr",
+ "args": {
+  "issue": "issue-4310",
+  "body": "File: src/api/reports.ts\n\nValidate that the user owns the specified account before creating or editing a report, matching the authorization check used for uploads.",
+  "branch": "repomind/issue-4310",
+  "title": "Validate account ownership when creating or updating reports"
+ },
+ "facts": {
+  "issue": 4310,
+  "issue_opened_by_agent": false,
+  "minutes_since_human_comment": null,
+  "label": null,
+  "branch": "repomind/issue-4310",
+  "branch_protected": false,
+  "base": "develop",
+  "target_created_by_agent": true,
+  "paths": []
+ },
+ "kind": "approval",
+ "request_id": "a45a49356bc8",
+ "asked_at": "2026-11-05T19:58:04.685Z"
+}

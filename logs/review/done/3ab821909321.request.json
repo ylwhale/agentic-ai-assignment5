@@ -1,0 +1,25 @@
+{
+ "run_id": "planned-4305-s01-fc6602",
+ "action": "open_pr",
+ "action_class": "open_pr",
+ "args": {
+  "body": "File: src/api/users.ts\n\nAllow users to update their email address in their profile settings by permitting the `email` field in the profile update schema and handling the new address correctly.",
+  "title": "Allow users to change their email address on their account",
+  "issue": "issue-4305",
+  "branch": "repomind/issue-4305"
+ },
+ "facts": {
+  "issue": 4305,
+  "issue_opened_by_agent": false,
+  "minutes_since_human_comment": null,
+  "label": null,
+  "branch": "repomind/issue-4305",
+  "branch_protected": false,
+  "base": "develop",
+  "target_created_by_agent": true,
+  "paths": []
+ },
+ "kind": "approval",
+ "request_id": "3ab821909321",
+ "asked_at": "2026-11-05T19:57:43.168Z"
+}
