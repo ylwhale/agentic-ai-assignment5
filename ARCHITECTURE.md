@@ -17,7 +17,7 @@ What each layer is for (Lecture 1, slides 42 to 44):
 - **Observability**: a step-by-step record of what it did.
 - **Evaluation**: measuring quality, before and after release.
 
-The table below is RepoMind as Assignment 4 left it.
+The table below describes RepoMind after the Assignment 5 control-and-policy changes.
 
 | Layer | What does this job | Where it is enforced | Status |
 |---|---|---|---|
@@ -29,4 +29,4 @@ The table below is RepoMind as Assignment 4 left it.
 | Observability | One trace line per model call and per tool call, and the plan as data before it runs | `agent/loop.py:50`, `ways/planned.py:178` | partial: traces, no alerts |
 | Evaluation | The grounded check reads the tracker, never the agent | `eval/check_triage.py:7` | partial: offline only |
 
-**Empty layers: 0 of 7**, and four are partial.
+**Empty layers: 0 of 7**; two layers are partial (Observability and Evaluation).
